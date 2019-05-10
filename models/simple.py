@@ -62,6 +62,7 @@ class UpsampleGenerator(nn.Module):
         self.dims = dims
 
         self.fc = nn.Linear(128, 4 * 4 * dims[0])
+        self.fc_bn = nn.BatchNorm2d(dims[0])
         self.relu = nn.ReLU(True)
         self.deconvs = nn.ModuleList()
         for prevDim, curDim in zip(dims[:-1], dims[1:]):
@@ -75,7 +76,8 @@ class UpsampleGenerator(nn.Module):
         self.tanh = nn.Tanh()
     
     def forward(self, x):
-        x = self.relu(self.fc(x)).view(-1, self.dims[0], 4, 4)
+        x = self.fc(x).view(-1, self.dims[0], 4, 4)
+        x = self.relu(self.fc_bn(x))
         for layers in self.deconvs: x = layers(x)
         x = self.tanh(self.visualize(x))
         return x

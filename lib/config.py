@@ -88,11 +88,11 @@ class BaseConfig(object):
             #self.gen_function = models.resnet.ResNetGen
             #self.disc_function = models.resnet.ResNetDisc
 
-            self.train_set = ds(self.data_path)
+            self.train_set = ds(self.data_path, self.imgsize)
             self.dl = lib.dataset.TFDataloader(self.train_set, self.args.batch_size)
 
         # prepare directory
-        self.name = self.dataset + "_" + str(self.args.batch_size)
+        self.name = self.dataset + "_bs" + str(self.args.batch_size)
         self.log_dir = self.args.log_dir + '/' + self.name
         self.model_dir = self.log_dir
 

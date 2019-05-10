@@ -47,7 +47,11 @@ class BaseGANTrainer(object):
         #self.backward_time = 0
         #self.update_time = 0
         for i in range(self.n_epoch):
-            self.dataloader.reset()
+            try:
+                self.dataloader.reset()
+            except:
+                # torch dataset does not have reset option
+                pass
             self.train_epoch()
             if i % self.cfg.args.save_freq == 1:
                 self.save()
@@ -71,15 +75,18 @@ class BaseGANTrainer(object):
             self.read_time += b1 - b2
             x = input.cuda()
             target = target.cuda()
+            if z is None:
+                z = torch.zeros(x.size(0), 128)
+                z = z.cuda()
+            z = z.normal_() * 2
+            if z.size(0) != x.size(0):
+                print("=> Skip incomplete batch")
+                continue
 
             # optimze G
             self.gen_optim.zero_grad()
             #self.gen_model.train()
             #self.disc_model.eval()
-            if z is None:
-                z = torch.zeros(x.size(0), 128)
-                z = z.cuda()
-            z = z.normal_() * 2
             fake_x = self.gen_model(z)
             disc_fake = self.disc_model(fake_x)
             if label_valid is None:

@@ -47,8 +47,8 @@ class TFDataloader():
         return self.num_iter
 
 class TFFileDataset():
-    def __init__(self, data_path, img_size=(64, 64), npy_dir=None):
-        self.img_size = img_size
+    def __init__(self, data_path, img_size=64, npy_dir=None):
+        self.img_size = (img_size, img_size)
 
         if ".zip" in data_path:
             self.use_zip = True
@@ -114,7 +114,7 @@ class TFFileDataset():
             return x
 
 class TFCelebADataset(TFFileDataset):
-    def __init__(self, data_path, img_size=(64, 64), npy_dir=None):
+    def __init__(self, data_path, img_size=64, npy_dir=None):
         super(TFCelebADataset, self).__init__(data_path, img_size, npy_dir)
 
     def access(self, idx):
