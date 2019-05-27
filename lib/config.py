@@ -9,6 +9,9 @@ class BaseConfig(object):
         self.parser = argparse.ArgumentParser(description='large batch size GAN training')
         self.parser.add_argument('--model', type=str, default="simple", metavar='MODEL',
                             help='model name (default: None)')
+        self.parser.add_argument('--gpu', type=str, default="0")
+        self.parser.add_argument('--d_lr', type=float, default=4e-4, help="discriminator lr")
+        self.parser.add_argument('--g_lr', type=float, default=1e-4, help="generator lr")
         self.parser.add_argument('--log_dir', type=str, default="logs", help='training directory (default: None)')
         self.parser.add_argument('--dataset', type=str, default='cifar', help='dataset name (default: cifar)')
         self.parser.add_argument('--data_dir', type=str, default="/home/atlantix/data/", metavar='PATH',
@@ -19,10 +22,10 @@ class BaseConfig(object):
         self.parser.add_argument('--resume', type=str, default=None, metavar='CKPT',
                             help='checkpoint to resume training from (default: None)')
 
-        self.parser.add_argument('--epochs', type=int, default=200, metavar='N', help='number of epochs to train (default: 200)')
+        self.parser.add_argument('--n_epoch', type=int, default=200, metavar='N', help='number of epochs to train (default: 200)')
         self.parser.add_argument('--summary_interval', type=int, default=1000, metavar='N', help='summary iteration (default: 1000')
         self.parser.add_argument('--save_freq', type=int, default=25, metavar='N', help='save frequency (default: 25)')
-        self.parser.add_argument('--eval_freq', type=int, default=5, metavar='N', help='eval frequency (default: 5)')
+        self.parser.add_argument('--eval_freq', type=int, default=1, metavar='N', help='eval frequency (default: 5)')
         self.parser.add_argument('--lr_init', type=float, default=0.1, metavar='LR', help='initial learning rate (default: 0.01)')
         self.parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.9)')
         self.parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
@@ -31,6 +34,12 @@ class BaseConfig(object):
 
     def parse(self):
         self.args = self.parser.parse_args()
+
+        self.d_lr = self.args.d_lr
+        self.g_lr = self.args.g_lr
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = self.args.gpu
+        self.num_gpu = len(self.args.gpu.split(","))
 
         if not os.path.isdir(self.args.data_dir):
             newdir = "/home/xujianjing/data/"
@@ -46,6 +55,7 @@ class BaseConfig(object):
         self.data_dir = self.args.data_dir
 
         if 'cifar' in self.dataset:
+            self.ref_path = self.data_dir + "/cifar10_image"
             self.data_path = self.data_dir
             self.upsample = 3
             ds = torchvision.datasets.cifar.CIFAR10
@@ -64,16 +74,26 @@ class BaseConfig(object):
             ])
 
             self.train_set = ds(self.data_path, train=True, download=True, transform=self.transform_train)
-            #self.test_set = ds(self.data_path, train=False, download=True, transform=self.transform_test)
-            self.dl = torch.utils.data.DataLoader(
+            self.test_set = ds(self.data_path, train=False, download=True, transform=self.transform_test)
+            self.dl = lib.dataset.PytorchDataloader(
+                    torch.utils.data.DataLoader(
                     self.train_set,
                     batch_size=self.args.batch_size,
                     shuffle=True,
                     num_workers=self.args.num_workers,
-                    pin_memory=True)
+                    pin_memory=True),
+                    torch.utils.data.DataLoader(
+                    self.test_set,
+                    batch_size=self.args.batch_size,
+                    shuffle=False,
+                    num_workers=self.args.num_workers,
+                    pin_memory=True),
+                    True)
 
         elif 'celeba' in self.dataset:
+            self.ref_path = self.data_dir + "celeba/img_align_celeba"
             self.data_path = self.data_dir + "celeba/img_align_celeba.zip"
+            self.npy_path = self.data_dir + "celeba/img_align_celeba.npy"
 
             if '64' in self.dataset:
                 self.upsample = 4
@@ -81,6 +101,7 @@ class BaseConfig(object):
             elif '128' in self.dataset:
                 self.upsample = 5
                 self.imgsize = 128
+            self.ref_path += str(self.imgsize)
             self.args.num_workers = 1
             ds = lib.dataset.TFCelebADataset
             self.gen_function = models.simple.UpsampleGenerator
@@ -88,11 +109,11 @@ class BaseConfig(object):
             #self.gen_function = models.resnet.ResNetGen
             #self.disc_function = models.resnet.ResNetDisc
 
-            self.train_set = ds(self.data_path, self.imgsize)
+            self.train_set = ds(self.data_path, self.imgsize, self.npy_path)
             self.dl = lib.dataset.TFDataloader(self.train_set, self.args.batch_size)
 
         # prepare directory
-        self.name = self.dataset + "_bs" + str(self.args.batch_size)
+        self.name = self.dataset + "_bs" + str(self.args.batch_size) + ("_d%.4f_g%.4f" % (self.d_lr, self.g_lr))
         self.log_dir = self.args.log_dir + '/' + self.name
         self.model_dir = self.log_dir
 

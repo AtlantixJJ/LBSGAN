@@ -5,6 +5,7 @@ import torchvision.utils as vutils
 from tensorboardX import SummaryWriter
 
 import lib
+from lib import utils
 
 def summary_grid_image(logger, x, name, step):
     if x.max() > 1:
@@ -17,9 +18,9 @@ class BaseGANTrainer(object):
     def __init__(self, gen_model, disc_model, dataloader, cfg):
         self.cfg = cfg
         self.summary_writer = SummaryWriter(cfg.log_dir)
-        self.evaluator = lib.evaluator.FixedNoiseEvaluator()
+        self.fid_evaluator = lib.evaluator.FIDEvaluator(cfg.ref_path, cuda=True)
         self.summary_interval = cfg.args.summary_interval
-        self.n_epoch = cfg.args.epochs
+        self.n_epoch = cfg.args.n_epoch
         self.gen_model = gen_model
         self.disc_model = disc_model
         self.dataloader = dataloader
@@ -27,9 +28,9 @@ class BaseGANTrainer(object):
         self.fixed_noise = torch.randn((16, 128)).cuda() * 2
 
         self.gen_optim = torch.optim.Adam(self.gen_model.parameters(),
-            lr=1e-4, betas=(0.0, 0.9), weight_decay=1e-4)
+            lr=cfg.g_lr, betas=(0.0, 0.9), weight_decay=1e-5)
         self.disc_optim = torch.optim.Adam(self.disc_model.parameters(),
-            lr=4e-4, betas=(0.0, 0.9), weight_decay=1e-4)
+            lr=cfg.d_lr, betas=(0.0, 0.9), weight_decay=1e-5)
         
         self.adv_crit = torch.nn.BCEWithLogitsLoss()
         self.adv_crit.cuda()
@@ -40,24 +41,45 @@ class BaseGANTrainer(object):
         self.iter = 0
     
     def train(self):
+        self.epoch = 0
         self.start_time = time.clock()
         self.compute_time = 0
         self.read_time = 0
-        #self.forward_time = 0
-        #self.backward_time = 0
-        #self.update_time = 0
         for i in range(self.n_epoch):
-            try:
-                self.dataloader.reset()
-            except:
-                # torch dataset does not have reset option
-                pass
+            self.epoch = i
+            self.dataloader.reset()
             self.train_epoch()
-            if i % self.cfg.args.save_freq == 1:
+            print("=> Average Time: %.3f" % (self.compute_time / (self.epoch + 1)))
+            if i % self.cfg.args.save_freq == 0 and i != 0:
                 self.save()
+            if i % self.cfg.args.eval_freq == 0 and i != 0:
+                self.dataloader.train = False
+                self.dataloader.reset()
+                with torch.no_grad():
+                    result = self.eval()
+                print("=> Evaluate epoch %d" % self.epoch)
+                for k, v in result.items():
+                    print("=> %s\t%.3f" % (k, v))
+                    self.summary_writer.add_scalar("eval_" + k, v, self.epoch)
+                self.dataloader.train = True
+    
+    def eval(self):
+        save_path = os.path.join(self.cfg.log_dir, "eval_epoch_%d" % self.epoch)
+        os.system("mkdir %s" % save_path)
+        self.gen_model.eval()
+        self.disc_model.eval()
+        fid_dist = self.fid_evaluator.fid(self.gen_model)
+
+        summary_grid_image(self.summary_writer, self.gen_model(self.fixed_noise).detach(),
+            "eval_generate_image", self.epoch)
+            
+        return {
+            "fid" : fid_dist,
+            "avgtime" : self.compute_time / (self.epoch + 1)
+            }
 
     def save(self):
-        savepath = self.cfg.args.log_dir
+        savepath = self.cfg.log_dir
         torch.save(dict(
             gen_model=self.gen_model.state_dict(),
             disc_model=self.disc_model.state_dict()
@@ -71,25 +93,21 @@ class BaseGANTrainer(object):
 
         b2 = time.clock()
         for i, (input, target) in enumerate(tqdm.tqdm(self.dataloader)):
+            if type(input) == int: break
             b1 = time.clock()
             self.read_time += b1 - b2
             x = input.cuda()
             target = target.cuda()
-            if z is None:
+            if z is None or z.size(0) != x.size(0):
                 z = torch.zeros(x.size(0), 128)
                 z = z.cuda()
             z = z.normal_() * 2
-            if z.size(0) != x.size(0):
-                print("=> Skip incomplete batch")
-                continue
 
             # optimze G
             self.gen_optim.zero_grad()
-            #self.gen_model.train()
-            #self.disc_model.eval()
             fake_x = self.gen_model(z)
             disc_fake = self.disc_model(fake_x)
-            if label_valid is None:
+            if label_valid is None or label_valid.size(0) != x.size(0):
                 label_valid = torch.zeros_like(disc_fake).fill_(1.0).cuda()
                 label_fake  = torch.zeros_like(disc_fake).fill_(0.0).cuda()
             g_loss = self.adv_crit(disc_fake, label_valid)
@@ -99,8 +117,6 @@ class BaseGANTrainer(object):
             self.summary_writer.add_scalar("g_loss", g_loss_val, self.iter)
 
             # optimize D
-            #self.disc_model.train()
-            #self.gen_model.eval()
             self.disc_optim.zero_grad()
             disc_real = self.disc_model(x)
             disc_fake = self.disc_model(fake_x.detach())
@@ -121,5 +137,6 @@ class BaseGANTrainer(object):
             if self.iter % self.summary_interval == 0:
                 summary_grid_image(self.summary_writer, self.gen_model(self.fixed_noise).detach(),
                     "generate_image", self.iter)
+            if self.iter == 0:
                 summary_grid_image(self.summary_writer, x,
                     "real_image", self.iter)

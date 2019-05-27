@@ -1,1 +1,0 @@
-tar cvfz - models lib *.py | ssh jianjin@52.168.87.19 "cd /home/jianjin/project/swa/; tar xvfz -" & tar cvfz - models lib *.py | ssh FAREAST.v-xuj@GCRAZGDL287 "cd swa; tar xvfz -"

@@ -1,1 +1,0 @@
-scp "FAREAST.v-xuj@GCRAZGDL287:swa/my*" ./ # scp "jianjin@52.168.87.19:/home/jianjin/project/swa/my*" ./ 

@@ -6,10 +6,9 @@ __pycache__/
 *$py.class
 
 #
-*.jpg
 *.mp4
 *passwd*
-
+.DS_Store
 # C extensions
 *.so
 

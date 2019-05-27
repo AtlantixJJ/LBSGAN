@@ -7,6 +7,7 @@ from PIL import Image
 from io import BytesIO
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
+import torch.nn.functional as F
 
 try:
     import xml.etree.cElementTree as ET
@@ -20,6 +21,58 @@ def is_image(name):
             return True
     return False
 
+def pil_bilinear_interpolation(x, size=(299, 299)):
+    """
+    x: [-1, 1] torch tensor
+    """
+    y = np.zeros((x.shape[0], size[0], size[1], x.shape[1]), dtype='uint8')
+    x_arr = ((x + 1) * 127.5).detach().cpu().numpy().astype("uint8")
+    x_arr = x_arr.transpose(0, 2, 3, 1)
+    for i in range(x_arr.shape[0]):
+        y[i] = np.asarray(Image.fromarray(x_arr[i]).resize(size))
+    return torch.from_numpy(y.transpose(0, 3, 1, 2)).type_as(x) / 128 - 1
+
+def make_generator_iterator(model, tot_num, batch_size=50, cuda=True):
+    z = torch.Tensor(batch_size, 128)
+    if cuda: z = z.cuda()
+    num_iter = tot_num // batch_size
+    if num_iter * batch_size < tot_num: num_iter += 1
+    for i in range(num_iter):
+        if i == num_iter - 1:
+            bs = tot_num - batch_size * i
+            z = torch.Tensor(bs, 128)
+            if cuda: z = z.cuda()
+        z = z.normal_() * 2
+        yield pil_bilinear_interpolation(model(z))
+
+def read_image_and_resize(filename, size):
+    """
+    An eagar function for reading image from zip
+    """
+    f = filename.numpy().decode("utf-8")
+    return np.asarray(Image.open(open(f, "rb")).resize(size))
+
+class PytorchDataloader():
+    def __init__(self, train_dl, test_dl, train):
+        self.train = train
+        self.train_dl = train_dl
+        self.test_dl = test_dl
+    
+    def reset(self):
+        pass
+    
+    def __iter__(self):
+        if self.train:
+            return self.train_dl.__iter__()
+        else:
+            return self.test_dl.__iter__()
+
+    def __len__(self):
+        if self.train:
+            return len(self.train_dl)
+        else:
+            return len(self.test_dl)
+
 class TFDataloader():
     def __init__(self, dataset, batch_size):
         """
@@ -27,7 +80,7 @@ class TFDataloader():
         """
         self.dataset = dataset
         self.batch_size = batch_size
-        self.num_iter = len(self.dataset) // self.batch_size
+        self.num_iter = len(self.dataset) // self.batch_size - 1
         self.dataset = dataset.dataset.shuffle(buffer_size=1000).batch(batch_size)
         self.iterator = self.dataset.make_initializable_iterator()
         self.next_element = self.iterator.get_next()
@@ -41,14 +94,23 @@ class TFDataloader():
         self.sess.run(self.iterator.initializer)
 
     def __getitem__(self, idx):
-        return [torch.Tensor(t) for t in self.sess.run(self.next_element)]
+        try:
+            item = self.sess.run(self.next_element)
+            if type(item) is tuple:
+                return [torch.Tensor(t) for t in item]
+            else:
+                return item
+        except tf.errors.OutOfRangeError:
+            print("=> TFDataloader out of range")
+            return (-1, -1)
     
     def __len__(self):
         return self.num_iter
 
 class TFFileDataset():
-    def __init__(self, data_path, img_size=64, npy_dir=None):
+    def __init__(self, data_path, img_size=64, npy_dir=None, train=True):
         self.img_size = (img_size, img_size)
+        self.train = train
 
         if ".zip" in data_path:
             self.use_zip = True
@@ -89,23 +151,24 @@ class TFFileDataset():
         An eagar function for reading image from zip
         """
         f = filename.numpy().decode("utf-8")
-        return np.asarray(Image.open(BytesIO(self.data_file.read(f))))
+        img = Image.open(BytesIO(self.data_file.read(f)))
+        return np.asarray(img)
 
     def _parse_function(self, filename, label):
         if self.use_zip:
-            x = tf.py_function(self.read_image_from_zip, [filename], tf.float32)
+            x = tf.py_function(self.read_image_resize_from_zip, [filename, self.img_size], tf.float32)
         else:
-            x = tf.read_file(filename)
-            x = tf.image.decode_image(x)
+            x = tf.py_function(read_image_resize, [filename, self.img_size], tf.float32)
         
         x = tf.expand_dims(x, 0)
-        x = tf.image.resize_bilinear(x, (self.img_size[0], self.img_size[1]))
+        #x = tf.image.resize_bilinear(x, (self.img_size[0], self.img_size[1]))
         x = x[0]
         x = tf.cast(x, tf.float32) / 255.0
-        x = tf.image.random_brightness(x, 0.05)
-        x = tf.image.random_contrast(x, 0.9, 1.1)
-        x = tf.image.random_flip_left_right(x)
-        x = tf.clip_by_value(x * 2 - 1, -1.0, 1.0)
+        if self.train:
+            x = tf.image.random_brightness(x, 0.05)
+            x = tf.image.random_contrast(x, 0.9, 1.1)
+            x = tf.image.random_flip_left_right(x)
+            x = tf.clip_by_value(x * 2 - 1, -1.0, 1.0)
         x = tf.transpose(x, (2, 0, 1)) # (H, W, C) => (C, H, W)
 
         if self.class_num > 0:
@@ -114,8 +177,9 @@ class TFFileDataset():
             return x
 
 class TFCelebADataset(TFFileDataset):
-    def __init__(self, data_path, img_size=64, npy_dir=None):
+    def __init__(self, data_path, img_size=64, npy_dir=None, train=True):
         super(TFCelebADataset, self).__init__(data_path, img_size, npy_dir)
+        self.train = train
 
     def access(self, idx):
         """
@@ -136,20 +200,26 @@ class TFCelebADataset(TFFileDataset):
         if self.use_zip:
             x = tf.py_function(self.read_image_from_zip, [filename], tf.float32)
         else:
+            #x = tf.py_function(read_image_resize, [filename, self.img_size], tf.float32)
             x = tf.read_file(filename)
             x = tf.image.decode_image(x)
         
         x = tf.image.crop_to_bounding_box(x, 50, 25, 128, 128)
         x = tf.expand_dims(x, 0)
+        #TF bilinear resize is not correct
         x = tf.image.resize_bilinear(x, (self.img_size[0], self.img_size[1]))
         x = x[0]
         x = tf.cast(x, tf.float32) / 255.0
-        x = tf.image.random_brightness(x, 0.05)
-        x = tf.image.random_contrast(x, 0.9, 1.1)
-        x = tf.image.random_flip_left_right(x)
+        if self.train:
+            x = tf.image.random_brightness(x, 0.05)
+            x = tf.image.random_contrast(x, 0.9, 1.1)
+            x = tf.image.random_flip_left_right(x)
         x = tf.clip_by_value(x * 2 - 1, -1.0, 1.0)
         x = tf.transpose(x, (2, 0, 1)) # (H, W, C) => (C, H, W)
-        return x, label
+        if self.class_num > 0:
+            return x, label
+        else:
+            return x
 
     def read_label(self):
         """
@@ -168,11 +238,34 @@ class TFCelebADataset(TFFileDataset):
         self.label[self.label==-1] = 0
         np.save(self.attr_file.replace(".txt", ""), self.label)
 
+class SimpleDataset(torch.utils.data.Dataset):
+    """
+    Currently label is not available
+    """
+    def __init__(self, data_path, size, transform=None):
+        self.size = size
+        self.data_path = data_path
+        self.transform = transform
+
+        self.files = sum([[file for file in files if ".jpg" in file or ".png" in file] for path, dirs, files in os.walk(data_path) if files], [])
+        self.files.sort()
+
+    def __getitem__(self, idx):
+        fpath = self.files[idx]
+        with open(os.path.join(self.data_path, fpath), "rb") as f:
+            img = Image.open(f).convert("RGB").resize(self.size)
+        if self.transform:
+            img = self.transform(img)
+        return img
+    
+    def __len__(self):
+        return len(self.files)
+
 class FileDataset(torch.utils.data.Dataset):
     """
     Currently label is not available
     """
-    def __init__(self, data_path, transform=None, **kwargs):
+    def __init__(self, data_path, transform=None):
         self.data_path = data_path
         self.transform = transform
 
@@ -202,7 +295,7 @@ class FileDataset(torch.utils.data.Dataset):
         else:
             with open(self.data_path + fpath, "rb") as f:
                 img = Image.open(f).convert("RGB")
-
+        img = img.resize((299, 299))
         if self.transform:
             img = self.transform(img)
 
