@@ -25,5 +25,9 @@ print(gen_model)
 print("=> Discriminator")
 print(disc_model)
 
-trainer = lib.train.BaseGANTrainer(gen_model, disc_model, cfg.dl, cfg)
+if cfg.args.delayed_batch_size > -1:
+    trainer = lib.train.DelayLBSTrainer(gen_model=gen_model, disc_model=disc_model, dataloader=cfg.dl, cfg=cfg)
+else:
+    trainer = lib.train.BaseGANTrainer(gen_model=gen_model, disc_model=disc_model, dataloader=cfg.dl, cfg=cfg)
+
 trainer.train()

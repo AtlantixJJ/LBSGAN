@@ -8,12 +8,12 @@ from PIL import Image
 import lib
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--path", default="/home/atlantix/data/celeba", type=str, help="path to celeba dataset")
 parser.add_argument("--size", default=64, type=int, help="image size: 64 or 128")
 args = parser.parse_args()
 
-data_dir = "/home/xujianjing/data/"
-data_path = data_dir + "celeba/img_align_celeba.zip"
-out_dir = data_dir + ("celeba/img_align_celeba%d/" % args.size)
+data_path = args.path + "/img_align_celeba.zip"
+out_dir = args.path + ("/img_align_celeba%d/" % args.size)
 os.system("mkdir %s" % out_dir)
 
 test_set = lib.dataset.TFCelebADataset(data_path, args.size, train=False)

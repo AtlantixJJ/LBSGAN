@@ -17,6 +17,7 @@ class BaseConfig(object):
         self.parser.add_argument('--data_dir', type=str, default="/home/atlantix/data/", metavar='PATH',
                             help='path to datasets location (default: None)')
         self.parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
+        self.parser.add_argument('--delayed_batch_size', type=int, default=-1, metavar='N', help='in order to simulate large batch size, the grad is accumulated by dbs')
         self.parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
 
         self.parser.add_argument('--resume', type=str, default=None, metavar='CKPT',
@@ -91,6 +92,7 @@ class BaseConfig(object):
                     True)
 
         elif 'celeba' in self.dataset:
+            self.args.n_epoch = 80
             self.ref_path = self.data_dir + "celeba/img_align_celeba"
             self.data_path = self.data_dir + "celeba/img_align_celeba.zip"
             self.npy_path = self.data_dir + "celeba/img_align_celeba.npy"
@@ -109,11 +111,11 @@ class BaseConfig(object):
             #self.gen_function = models.resnet.ResNetGen
             #self.disc_function = models.resnet.ResNetDisc
 
-            self.train_set = ds(self.data_path, self.imgsize, self.npy_path)
+            self.train_set = ds(self.data_path, self.imgsize, self.npy_path, self.args.seed)
             self.dl = lib.dataset.TFDataloader(self.train_set, self.args.batch_size)
 
         # prepare directory
-        self.name = self.dataset + "_bs" + str(self.args.batch_size) + ("_d%.4f_g%.4f" % (self.d_lr, self.g_lr))
+        self.name = self.dataset + "_bs" + str(self.args.batch_size) + "_seed" + str(self.args.seed) 
         self.log_dir = self.args.log_dir + '/' + self.name
         self.model_dir = self.log_dir
 

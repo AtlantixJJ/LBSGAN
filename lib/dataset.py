@@ -108,7 +108,7 @@ class TFDataloader():
         return self.num_iter
 
 class TFFileDataset():
-    def __init__(self, data_path, img_size=64, npy_dir=None, train=True):
+    def __init__(self, data_path, img_size=64, npy_dir=None, train=True, seed=1):
         self.img_size = (img_size, img_size)
         self.train = train
 
@@ -124,7 +124,7 @@ class TFFileDataset():
             self.files.sort()
 
         self.idxs = np.arange(len(self.files))
-        self.rng = np.random.RandomState(1)
+        self.rng = np.random.RandomState(seed)
         self.rng.shuffle
 
         # 图片文件的列表
@@ -177,8 +177,8 @@ class TFFileDataset():
             return x
 
 class TFCelebADataset(TFFileDataset):
-    def __init__(self, data_path, img_size=64, npy_dir=None, train=True):
-        super(TFCelebADataset, self).__init__(data_path, img_size, npy_dir)
+    def __init__(self, data_path, img_size=64, npy_dir=None, train=True, seed=1):
+        super(TFCelebADataset, self).__init__(data_path, img_size, npy_dir, seed)
         self.train = train
 
     def access(self, idx):

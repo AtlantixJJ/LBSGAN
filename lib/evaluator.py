@@ -88,5 +88,5 @@ class FIDEvaluator(object):
 
     def fid(self, gen_model):
         m1, s1 = self.calculate_statistics_given_path(self.ref_datapath)
-        m2, s2 = lib.fid.fid_score.calculate_statistics_given_iterator(self.model, self.cuda, lib.dataset.make_generator_iterator(gen_model, m1.shape[0]))
+        m2, s2 = lib.fid.fid_score.calculate_statistics_given_iterator(self.model, self.cuda, lib.dataset.make_generator_iterator(gen_model, min(50000, m1.shape[0])))
         return lib.fid.fid_score.calculate_frechet_distance(m1, s1, m2, s2)
