@@ -5,7 +5,7 @@ import torch, torchvision
 import numpy as np
 import torch.nn.functional as F
 import lib, argparse
-from lib.fid.inception_origin import inception_v3
+from lib.fid.inception_modified import inception_v3
 from lib.fid import tf_fid, fid_score
 
 parser = argparse.ArgumentParser()

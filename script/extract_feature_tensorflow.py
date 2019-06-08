@@ -5,7 +5,7 @@ import tensorflow as tf
 import numpy as np
 import torch.nn.functional as F
 import lib
-from lib.fid.inception_origin import inception_v3
+from lib.fid.inception_modified import inception_v3
 from lib.fid import tf_fid
 
 parser = argparse.ArgumentParser()

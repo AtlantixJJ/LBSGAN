@@ -12,8 +12,8 @@ seed = [1, 5, 7]
 os.system("which python")
 bs = [int(b) for b in args.bs.split(",") if len(b) > 0]
 
-for b in bs:
-  for s in seed:
+for s in seed:
+  for b in bs:
     cmd = "python gan.py --dataset %s --batch_size %d --seed %d --gpu %s" % (args.dataset, b, s, args.gpu)
     if args.dbs > 0:
       cmd += " --delayed_batch_size %d" % args.dbs

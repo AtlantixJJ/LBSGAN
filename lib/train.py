@@ -19,7 +19,12 @@ class BaseGANTrainer(object):
     def __init__(self, gen_model, disc_model, dataloader, cfg):
         self.cfg = cfg
         self.summary_writer = SummaryWriter(cfg.log_dir)
-        self.fid_evaluator = lib.evaluator.FIDEvaluator(cfg.ref_path, cuda=True)
+        self.gen_ds = lib.dataset.GeneratorIterator(gen_model, cuda=True)
+        if "file" in cfg.args.eval_method:
+            self.fid_evaluator = lib.evaluator.FIDEvaluator(cfg.ref_path,
+                save_path=cfg.log_dir, cuda=True)
+        else:
+            self.fid_evaluator = lib.evaluator.FIDEvaluator(cfg.ref_path, cuda=True)
         self.summary_interval = cfg.args.summary_interval
         self.n_epoch = cfg.args.n_epoch
         self.gen_model = gen_model
@@ -82,15 +87,13 @@ class BaseGANTrainer(object):
     def eval(self):
         self.gen_model.eval()
         self.disc_model.eval()
-        fid_dist = self.fid_evaluator.fid(self.gen_model)
-
+        dic = {}
+        fid_dist = self.fid_evaluator(self.gen_ds, self.epoch + 1)
+        dic['fid'] = fid_dist
+        dic['avgtime'] = self.compute_time / (self.epoch + 1)
         summary_grid_image(self.summary_writer, self.gen_model(self.fixed_noise).detach(),
-            "eval_generate_image", self.epoch)
-            
-        return {
-            "fid" : fid_dist,
-            "avgtime" : self.compute_time / (self.epoch + 1)
-            }
+            "eval_generate_image", self.epoch + 1)
+        return dic
 
     def save(self):
         savepath = self.cfg.log_dir
@@ -175,13 +178,9 @@ class DelayLBSTrainer(BaseGANTrainer):
             # optimze G
             self.gen_optim.zero_grad()
             g_loss_val = 0
-            bg, ed = -self.dbs, 0
-            while ed < self.cfg.args.batch_size:
-                bg += self.dbs
-                ed = min(bg + self.dbs, self.cfg.args.batch_size)
-                bs = ed - bg
-                if z is None or z.size(0) != bs:
-                    z = torch.zeros(bs, 128)
+            for i in range(self.cfg.args.batch_size // self.dbs):
+                if z is None or z.size(0) != self.dbs:
+                    z = torch.zeros(self.dbs, 128)
                     z = z.cuda()
                 z = z.normal_() * 2
                 # [NOTICE] BatchNorm here is probably incorrect
@@ -200,9 +199,9 @@ class DelayLBSTrainer(BaseGANTrainer):
             self.disc_optim.zero_grad()
             d_loss_val = 0
             bg, ed = -self.dbs, 0
-            while ed < self.cfg.args.batch_size:
+            while ed < input.shape[0]:
                 bg += self.dbs
-                ed = min(bg + self.dbs, self.cfg.args.batch_size)
+                ed = min(bg + self.dbs, input.shape[0])
                 bs = ed - bg
                 disc_real = self.disc_model(input[bg: ed].cuda())
                 if z is None or z.size(0) != bs:
@@ -211,6 +210,9 @@ class DelayLBSTrainer(BaseGANTrainer):
                 z = z.normal_() * 2
                 fake_x = self.gen_model(z)
                 disc_fake = self.disc_model(fake_x.detach())
+                if label_valid is None or label_valid.size(0) != disc_fake.shape[0]:
+                    label_valid = torch.zeros_like(disc_fake).fill_(1.0).cuda()
+                    label_fake  = torch.zeros_like(disc_fake).fill_(0.0).cuda()
                 loss_real = self.adv_crit(disc_real, label_valid)
                 loss_fake = self.adv_crit(disc_fake, label_fake)
                 d_loss = loss_real + loss_fake

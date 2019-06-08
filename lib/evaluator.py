@@ -6,7 +6,7 @@ import numpy as np
 import torch.nn.functional as F
 import torchvision
 from torchvision import transforms
-from lib.fid.inception_origin import inception_v3
+from lib.fid.inception_modified import inception_v3
 
 def gan_eval(loader, gen_model, disc_model, criterion):
     loss_fake_sum, loss_real_sum = 0.0, 0.0
@@ -50,23 +50,42 @@ class FixedNoiseEvaluator(object):
         summary.add_scalar(res['loss_real'], name + "loss_real", step)
         return res
 
+class FileEvaluator(object):
+    def __init__(self, save_dir, file_num=50000, batch_size=50, cuda=False):
+        self.save_dir = save_dir
+        self.file_num = file_num
+        self.cuda = cuda
+        self.batch_size = batch_size
+    
+    def __call__(self, gen_model, epoch):
+        epoch_dir = os.path.join(self.save_dir, "eval_epoch_%d" % epoch)
+        print("=> Save image to %s" % epoch_dir)
+        os.system("mkdir %s" % epoch_dir)
+        z = torch.Tensor(self.batch_size, 128)
+        if self.cuda: z = z.cuda()
+        for i in range(self.file_num // self.batch_size):
+            z = z.normal_() * 2
+            lib.utils.save_4dtensor_image(
+                epoch_dir + "/%05d.jpg",
+                i * self.batch_size,
+                (gen_model(z) + 1) * 127.5)
+
 class FIDEvaluator(object):
-    def __init__(self, ref_datapath, batch_size=50, cuda=False, dims=2048):
+    def __init__(self, ref_datapath, save_path=None, batch_size=50, cuda=True):
         self.ref_datapath = ref_datapath
+        self.save_path = save_path
         self.batch_size = batch_size
         self.cuda = cuda
-        self.dims = dims
 
         self.model = inception_v3(pretrained=True, aux_logits=False, transform_input=False)
         self.model.eval()
-        if cuda:
-            self.model.cuda()
+        if cuda: self.model.cuda()
         
         self.transform_test = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 
-    def calculate_statistics_given_path(self, path):
+    def calculate_statistics_given_path(self, path, save_npy=True):
         npylist = glob.glob(os.path.join(path, "*.npy"))
         if len(npylist) > 0:
             path = npylist[0]
@@ -77,16 +96,21 @@ class FIDEvaluator(object):
         else:
             print("=> Calc from path %s" % path)
             op = pathlib.Path(path)
-            files = list(op.glob('*.jpg')) + list(op.glob('*.png'))
             ds = lib.dataset.SimpleDataset(path, (299, 299), self.transform_test)
-            dl = torch.utils.data.DataLoader(ds, batch_size=50, shuffle=False, num_workers=1, pin_memory=True)
+            np.random.RandomState(1314).shuffle(ds.files)
+            ds.files = ds.files[:50000]
+            dl = torch.utils.data.DataLoader(ds, batch_size=64, shuffle=False, num_workers=1, pin_memory=True)
             feature = lib.fid.fid_score.get_feature(self.model, dl, self.cuda)
             mu = np.mean(feature, axis=0)
             sigma = np.cov(feature, rowvar=False)
-            np.save(os.path.join(path, "mu_sigma.npy"), {"mu": mu, "sigma": sigma})
+            if save_npy:
+                np.save(os.path.join(path, "mu_sigma.npy"), {"mu": mu, "sigma": sigma})
             return mu, sigma
 
-    def fid(self, gen_model):
+    def __call__(self, gs, epoch):
         m1, s1 = self.calculate_statistics_given_path(self.ref_datapath)
-        m2, s2 = lib.fid.fid_score.calculate_statistics_given_iterator(self.model, self.cuda, lib.dataset.make_generator_iterator(gen_model, min(50000, m1.shape[0])))
+        m2, s2 = lib.fid.fid_score.calculate_statistics_given_iterator(
+            self.model,
+            gs.iterator() if self.save_path is None else gs.iterator(self.save_path + ("/eval_epoch_%d" % epoch)),
+            self.cuda)
         return lib.fid.fid_score.calculate_frechet_distance(m1, s1, m2, s2)

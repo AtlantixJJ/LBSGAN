@@ -6,7 +6,7 @@ sys.path.insert(0, ".")
 import numpy as np
 import tensorflow as tf
 import torch
-from lib.fid.inception_origin import inception_v3
+from lib.fid.inception_modified import inception_v3
 from PIL import Image
 from tf_fid import *
 

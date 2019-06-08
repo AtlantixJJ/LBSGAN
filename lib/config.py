@@ -14,19 +14,17 @@ class BaseConfig(object):
         self.parser.add_argument('--g_lr', type=float, default=1e-4, help="generator lr")
         self.parser.add_argument('--log_dir', type=str, default="logs", help='training directory (default: None)')
         self.parser.add_argument('--dataset', type=str, default='cifar', help='dataset name (default: cifar)')
-        self.parser.add_argument('--data_dir', type=str, default="/home/atlantix/data/", metavar='PATH',
-                            help='path to datasets location (default: None)')
+        self.parser.add_argument('--data_dir', type=str, default="/home/atlantix/data/", metavar='PATH', help='path to datasets location (default: None)')
         self.parser.add_argument('--batch_size', type=int, default=128, metavar='N', help='input batch size (default: 128)')
         self.parser.add_argument('--delayed_batch_size', type=int, default=-1, metavar='N', help='in order to simulate large batch size, the grad is accumulated by dbs')
         self.parser.add_argument('--num_workers', type=int, default=4, metavar='N', help='number of workers (default: 4)')
-
         self.parser.add_argument('--resume', type=str, default=None, metavar='CKPT',
                             help='checkpoint to resume training from (default: None)')
-
         self.parser.add_argument('--n_epoch', type=int, default=200, metavar='N', help='number of epochs to train (default: 200)')
         self.parser.add_argument('--summary_interval', type=int, default=1000, metavar='N', help='summary iteration (default: 1000')
         self.parser.add_argument('--save_freq', type=int, default=25, metavar='N', help='save frequency (default: 25)')
         self.parser.add_argument('--eval_freq', type=int, default=1, metavar='N', help='eval frequency (default: 5)')
+        self.parser.add_argument('--eval_method', type=str, default="fid",help='fid,file,none')
         self.parser.add_argument('--lr_init', type=float, default=0.1, metavar='LR', help='initial learning rate (default: 0.01)')
         self.parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='SGD momentum (default: 0.9)')
         self.parser.add_argument('--wd', type=float, default=1e-4, help='weight decay (default: 1e-4)')
@@ -106,7 +104,7 @@ class BaseConfig(object):
             self.ref_path += str(self.imgsize)
             self.args.num_workers = 1
             ds = lib.dataset.TFCelebADataset
-            self.gen_function = models.simple.UpsampleGenerator
+            self.gen_function = models.simple.ConvolutionGenerator
             self.disc_function = models.simple.DownsampleDiscriminator
             #self.gen_function = models.resnet.ResNetGen
             #self.disc_function = models.resnet.ResNetDisc

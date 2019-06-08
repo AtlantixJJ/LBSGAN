@@ -1,25 +1,12 @@
+import os, time, sys, zipfile
 import tensorflow as tf
 import torch
+from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 from io import open, BytesIO
-import os, time, sys, zipfile
 import numpy as np
 from PIL import Image
-from io import BytesIO
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-import torch.nn.functional as F
-
-try:
-    import xml.etree.cElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET
-
-def is_image(name):
-    exts = ['.jpg', '.JPG', '.jpeg', '.JPEG', '.png', '.PNG']
-    for ext in exts:
-        if ext in name:
-            return True
-    return False
+import lib
 
 def pil_bilinear_interpolation(x, size=(299, 299)):
     """
@@ -29,21 +16,8 @@ def pil_bilinear_interpolation(x, size=(299, 299)):
     x_arr = ((x + 1) * 127.5).detach().cpu().numpy().astype("uint8")
     x_arr = x_arr.transpose(0, 2, 3, 1)
     for i in range(x_arr.shape[0]):
-        y[i] = np.asarray(Image.fromarray(x_arr[i]).resize(size))
-    return torch.from_numpy(y.transpose(0, 3, 1, 2)).type_as(x) / 128 - 1
-
-def make_generator_iterator(model, tot_num, batch_size=50, cuda=True):
-    z = torch.Tensor(batch_size, 128)
-    if cuda: z = z.cuda()
-    num_iter = tot_num // batch_size
-    if num_iter * batch_size < tot_num: num_iter += 1
-    for i in range(num_iter):
-        if i == num_iter - 1:
-            bs = tot_num - batch_size * i
-            z = torch.Tensor(bs, 128)
-            if cuda: z = z.cuda()
-        z = z.normal_() * 2
-        yield pil_bilinear_interpolation(model(z))
+        y[i] = np.asarray(Image.fromarray(x_arr[i]).resize(size, Image.BILINEAR))
+    return torch.from_numpy(y.transpose(0, 3, 1, 2)).type_as(x) / 127.5 - 1
 
 def read_image_and_resize(filename, size):
     """
@@ -52,7 +26,38 @@ def read_image_and_resize(filename, size):
     f = filename.numpy().decode("utf-8")
     return np.asarray(Image.open(open(f, "rb")).resize(size))
 
-class PytorchDataloader():
+class GeneratorIterator(object):
+    def __init__(self, model, tot_num=50000, batch_size=64, cuda=True):
+        self.model = model
+        self.tot_num = tot_num
+        self.cuda = cuda
+        self.batch_size = batch_size
+        self.num_iter = self.tot_num // self.batch_size
+    
+    def iterator(self, save_path=None):
+        if save_path is not None:
+            os.system("mkdir %s" % save_path)
+        z = torch.Tensor(self.batch_size, 128)
+        if self.cuda: z = z.cuda()
+        if self.num_iter * self.batch_size < self.tot_num:
+            self.num_iter += 1
+        for i in range(self.num_iter):
+            if i == self.num_iter - 1:
+                bs = self.tot_num - self.batch_size * i
+                if bs < self.batch_size:
+                    z = torch.Tensor(bs, 128)
+                    if self.cuda: z = z.cuda()
+            z = z.normal_() * 2
+            t = self.model(z)
+            if save_path is not None:
+                lib.utils.save_4dtensor_image(
+                    save_path + "/%05d.jpg",
+                    i * self.batch_size,
+                    (t + 1) * 127.5)
+
+            yield pil_bilinear_interpolation(t)
+
+class PytorchDataloader(object):
     def __init__(self, train_dl, test_dl, train):
         self.train = train
         self.train_dl = train_dl
@@ -253,7 +258,7 @@ class SimpleDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         fpath = self.files[idx]
         with open(os.path.join(self.data_path, fpath), "rb") as f:
-            img = Image.open(f).convert("RGB").resize(self.size)
+            img = Image.open(f).convert("RGB").resize(self.size, Image.BILINEAR)
         if self.transform:
             img = self.transform(img)
         return img

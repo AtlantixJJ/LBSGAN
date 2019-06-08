@@ -49,7 +49,7 @@ except ImportError:
     # If not tqdm is not available, provide a mock version of it
     def tqdm(x): return x
 
-from lib.fid.inception_origin import inception_v3
+from lib.fid.inception_modified import inception_v3
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument('path', type=str, nargs=2,
@@ -232,7 +232,7 @@ def get_feature(model, iterator, cuda=False):
     features = []
     for sample in tqdm(iterator):
         if cuda: sample = sample.cuda()
-        pred = model.get_feature(sample)[-1]
+        pred = model(sample)[-1]
         features.append(pred.detach().cpu().numpy().reshape(sample.shape[0], -1))
     return np.concatenate(features)
 
@@ -254,7 +254,7 @@ def calculate_fid_given_paths(paths, batch_size, cuda, dims):
 
     return fid_value
 
-def calculate_statistics_given_iterator(model, cuda, iterator):
+def calculate_statistics_given_iterator(model, iterator, cuda):
     feature = get_feature(model, iterator, cuda)
     mu = np.mean(feature, axis=0)
     sigma = np.cov(feature, rowvar=False)
