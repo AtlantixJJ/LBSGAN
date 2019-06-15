@@ -30,7 +30,7 @@ if args.mode == "cifar":
     output_list = []
     for path,expr in zip(["examples/cifar_gan"], ["cifar"]):
         expr_path = caffe_dir + "/" + path
-        for g_model in ["deconv", "pxs", "upsample"]:
+        for g_model in ["deconv", "pxs", "upsample", 'upsample_scale']:
             expr_name = "%s_pool_%s" % (expr, g_model)
             log_path = caffe_dir + "/log/" + expr_name
             name_list.append(expr_name)
@@ -39,11 +39,12 @@ if args.mode == "cifar":
             output_list.append(caffe_dir + "/log/eval/" + expr_name)
     
     ref_mu, ref_sigma = evaluator.calculate_statistics_given_path("/home/atlantix/data/cifar10_image")
-
-    cmd = "CUDA_VISIBLE_DEVICES=%d %s/build/tools/caffe_gan test --gpu 0 --iterations 100 --g_model %s --g_weights %s --output %s"
+    
+    cmd = "CUDA_VISIBLE_DEVICES=%d %s/build/tools/caffe_gan test --gpu 0 --iterations 100 --g_model %s --g_weights %s --output %s/"
     fids = []
     for i in range(len(name_list)):
-        for j in range(1, 11):
+        os.system("mkdir %s" % output_list[i])
+        for j in range(1, 10):
             pcmd = cmd % (gpu_id, caffe_dir, proto_list[i], weight_list[i], output_list[i])
             pcmd = pcmd % (j * 2000)
             print(pcmd)
@@ -52,9 +53,8 @@ if args.mode == "cifar":
             fid = lib.fid.fid_score.calculate_frechet_distance(ref_mu, ref_sigma, tar_mu, tar_sigma)
             print("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
             fids.append(fid)
-            with open(args.output, "w") as f:
-                for fid in fids:
-                    f.write("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
+            with open(args.output, "a+") as f:
+                f.write("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
             np.save(args.output.replace(".txt", ".npy"), fids)
 
 if args.mode == "mnist":
@@ -65,9 +65,9 @@ if args.mode == "mnist":
     proto_list = []
     weight_list = []
     output_list = []
-    for path,expr in zip(["examples/cifar_gan", "examples/mnist_gan"], ["cifar", "mnist"]):
+    for path,expr in zip(["examples/mnist_gan"], ["mnist"]):
         expr_path = caffe_dir + "/" + path
-        for g_model in ["deconv", "pxs", "upsample"]:
+        for g_model in ["deconv", "pxs", "upsample", "upsample_scale"]:
             expr_name = "%s_pool_%s" % (expr, g_model)
             log_path = caffe_dir + "/log/" + expr_name
             name_list.append(expr_name)
@@ -80,7 +80,8 @@ if args.mode == "mnist":
     cmd = "CUDA_VISIBLE_DEVICES=%d %s/build/tools/caffe_gan test --gpu 0 --iterations 100 --g_model %s --g_weights %s --output %s"
     fids = []
     for i in range(len(name_list)):
-        for j in range(1, 11):
+        os.system("mkdir %s" % output_list[i])
+        for j in range(1, 10):
             pcmd = cmd % (gpu_id, caffe_dir, proto_list[i], weight_list[i], output_list[i])
             pcmd = pcmd % (j * 2000)
             print(pcmd)
@@ -89,9 +90,8 @@ if args.mode == "mnist":
             fid = lib.fid.fid_score.calculate_frechet_distance(ref_mu, ref_sigma, tar_mu, tar_sigma)
             print("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
             fids.append(fid)
-            with open(args.output, "w") as f:
-                for fid in fids:
-                    f.write("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
+            with open(args.output, "a+") as f:
+                f.write("%s %d %.3f\n" % (name_list[i], j * 2000, fid))
             np.save(args.output.replace(".txt", ".npy"), fids)
 
 elif args.mode == "path":

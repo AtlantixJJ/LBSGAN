@@ -52,6 +52,59 @@ class ConvolutionDiscriminator(nn.Module):
         x = self.fc(x.view(-1, 4 * 4 * self.dims[-1]))
         return x
 
+class MNISTUpsampleGenerator(nn.Module):
+    def __init__(self):
+        """
+        Start from 4x4, upsample=3 -> 32
+        """
+        super(UpsampleGenerator, self).__init__()
+        dims = [256, 128, 64]
+        self.dims = dims
+
+        self.fc = nn.Linear(128, 7 * 7 * dims[0])
+        self.fc_bn = nn.BatchNorm2d(dims[0])
+        self.relu = nn.ReLU(True)
+        self.deconvs = nn.ModuleList()
+        for prevDim, curDim in zip(dims[:-1], dims[1:]):
+            conv = nn.Sequential()
+            conv.upsample = nn.Upsample(scale_factor=2)
+            conv.conv = nn.Conv2d(prevDim, curDim, 3, padding=1)
+            conv.bn = nn.BatchNorm2d(curDim)
+            conv.relu = nn.ReLU(True)
+            self.deconvs.append(conv)
+        self.visualize = nn.Conv2d(dims[-1], 1, 3, padding=1)
+        self.tanh = nn.Tanh()
+    
+    def forward(self, x):
+        x = self.fc(x).view(-1, self.dims[0], 4, 4)
+        x = self.relu(self.fc_bn(x))
+        for layers in self.deconvs: x = layers(x)
+        x = self.tanh(self.visualize(x))
+        return x
+
+class MNISTDownsampleDiscriminator(nn.Module):
+    def __init__(self):
+        super(DownsampleDiscriminator, self).__init__()
+        dims = [64, 128, 256]
+        self.dims = dims
+
+        self.conv = nn.Conv2d(3, dims[0], 3, padding=1)
+        self.lrelu = nn.LeakyReLU(0.2, True)
+        self.convs = nn.ModuleList()
+        for prevDim, curDim in zip(dims[:-1], dims[1:]):
+            conv = nn.Sequential()
+            conv.conv = nn.Conv2d(prevDim, curDim, 3, padding=1)
+            conv.downsample = nn.AvgPool2d(2, 2)
+            conv.lrelu = nn.LeakyReLU(0.2, True)
+            self.convs.append(conv)
+        self.fc = nn.Linear(4 * 4 * dims[-1], 1)
+
+    def forward(self, x):
+        x = self.lrelu(self.conv(x))
+        for layers in self.convs: x = layers(x)
+        x = self.fc(x.view(-1, 4 * 4 * self.dims[-1]))
+        return x
+
 class UpsampleGenerator(nn.Module):
     def __init__(self, upsample=3):
         """

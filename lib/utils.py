@@ -22,6 +22,8 @@ def save_4dtensor_image(name_format, idx, t):
     idx: start index
     """
     t_arr = t.detach().cpu().numpy().astype("uint8").transpose(0, 2, 3, 1)
+    if t_arr.shape[-1] == 1:
+        t_arr = t_arr[:, :, :, 0]
     for i in range(t_arr.shape[0]):
         save_npy_image(name_format % (idx + i), t_arr[i])
 
