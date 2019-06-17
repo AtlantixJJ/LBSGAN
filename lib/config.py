@@ -53,10 +53,52 @@ class BaseConfig(object):
         self.dataset = self.args.dataset
         self.data_dir = self.args.data_dir
 
-        if 'cifar' in self.dataset:
+        if 'mnist' in self.dataset:
+            self.ref_path = self.data_dir + "mnist/mnist_train"
+            self.data_path = self.data_dir
+            self.upsample = 2
+            self.downsample = 3
+            self.out_dim = 1
+            self.map_size = 7
+            ds = torchvision.datasets.MNIST
+            self.gen_function = models.simple.ConvolutionGenerator
+            self.disc_function = models.simple.DownsampleDiscriminator
+
+            self.transform_train = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5,), (0.5,))
+            ])
+
+            self.transform_test = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.5,), (0.5,))
+            ])
+
+            self.train_set = ds(self.data_path, train=True, download=True, transform=self.transform_train)
+            self.test_set = ds(self.data_path, train=False, download=True, transform=self.transform_test)
+            self.dl = lib.dataset.PytorchDataloader(
+                    torch.utils.data.DataLoader(
+                    self.train_set,
+                    batch_size=self.args.batch_size,
+                    shuffle=True,
+                    num_workers=self.args.num_workers,
+                    pin_memory=True),
+                    torch.utils.data.DataLoader(
+                    self.test_set,
+                    batch_size=self.args.batch_size,
+                    shuffle=False,
+                    num_workers=self.args.num_workers,
+                    pin_memory=True),
+                    True)
+
+
+        elif 'cifar' in self.dataset:
             self.ref_path = self.data_dir + "/cifar10_image"
             self.data_path = self.data_dir
             self.upsample = 3
+            self.downsample = 3
+            self.out_dim = 3
+            self.map_size = 4
             ds = torchvision.datasets.cifar.CIFAR10
             self.gen_function = models.simple.UpsampleGenerator
             self.disc_function = models.simple.DownsampleDiscriminator
@@ -97,10 +139,14 @@ class BaseConfig(object):
 
             if '64' in self.dataset:
                 self.upsample = 4
+                self.downsample = 4
                 self.imgsize = 64
             elif '128' in self.dataset:
                 self.upsample = 5
+                self.downsample = 5
                 self.imgsize = 128
+            self.out_dim = 3
+            self.map_size = 4
             self.ref_path += str(self.imgsize)
             self.args.num_workers = 1
             ds = lib.dataset.TFCelebADataset

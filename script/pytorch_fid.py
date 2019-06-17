@@ -30,7 +30,7 @@ if args.mode == "cifar":
     output_list = []
     for path,expr in zip(["examples/cifar_gan"], ["cifar"]):
         expr_path = caffe_dir + "/" + path
-        for g_model in ["deconv", "pxs", "upsample", 'upsample_scale']:
+        for g_model in ["deconv", "pxs", "upsample"]:
             expr_name = "%s_pool_%s" % (expr, g_model)
             log_path = caffe_dir + "/log/" + expr_name
             name_list.append(expr_name)
@@ -44,7 +44,7 @@ if args.mode == "cifar":
     fids = []
     for i in range(len(name_list)):
         os.system("mkdir %s" % output_list[i])
-        for j in range(1, 10):
+        for j in range(10, 11):
             pcmd = cmd % (gpu_id, caffe_dir, proto_list[i], weight_list[i], output_list[i])
             pcmd = pcmd % (j * 2000)
             print(pcmd)
@@ -67,7 +67,7 @@ if args.mode == "mnist":
     output_list = []
     for path,expr in zip(["examples/mnist_gan"], ["mnist"]):
         expr_path = caffe_dir + "/" + path
-        for g_model in ["deconv", "pxs", "upsample", "upsample_scale"]:
+        for g_model in ["deconv", "pxs", "upsample"]:
             expr_name = "%s_pool_%s" % (expr, g_model)
             log_path = caffe_dir + "/log/" + expr_name
             name_list.append(expr_name)
@@ -81,7 +81,7 @@ if args.mode == "mnist":
     fids = []
     for i in range(len(name_list)):
         os.system("mkdir %s" % output_list[i])
-        for j in range(1, 10):
+        for j in range(10, 11):
             pcmd = cmd % (gpu_id, caffe_dir, proto_list[i], weight_list[i], output_list[i])
             pcmd = pcmd % (j * 2000)
             print(pcmd)

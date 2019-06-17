@@ -12,11 +12,15 @@ def pil_bilinear_interpolation(x, size=(299, 299)):
     """
     x: [-1, 1] torch tensor
     """
-    y = np.zeros((x.shape[0], size[0], size[1], x.shape[1]), dtype='uint8')
+    y = np.zeros((x.shape[0], size[0], size[1], 3), dtype='uint8')
     x_arr = ((x + 1) * 127.5).detach().cpu().numpy().astype("uint8")
     x_arr = x_arr.transpose(0, 2, 3, 1)
     for i in range(x_arr.shape[0]):
-        y[i] = np.asarray(Image.fromarray(x_arr[i]).resize(size, Image.BILINEAR))
+        if x_arr.shape[-1] == 1:
+            y[i] = np.asarray(Image.fromarray(x_arr[i, :, :, 0]).resize(
+                size, Image.BILINEAR).convert("RGB"))
+        else:
+            y[i] = np.asarray(Image.fromarray(x_arr[i]).resize(size, Image.BILINEAR))
     return torch.from_numpy(y.transpose(0, 3, 1, 2)).type_as(x) / 127.5 - 1
 
 def read_image_and_resize(filename, size):

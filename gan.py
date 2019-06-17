@@ -11,8 +11,13 @@ cfg = lib.config.BaseConfig()
 cfg.parse()
 
 print('Preparing model')
-gen_model = cfg.gen_function(upsample=cfg.upsample)
-disc_model = cfg.disc_function(downsample=cfg.upsample)
+gen_model = cfg.gen_function(
+    upsample=cfg.upsample,
+    map_size=cfg.map_size,
+    out_dim=cfg.out_dim)
+disc_model = cfg.disc_function(
+    downsample=cfg.downsample,
+    in_dim=cfg.out_dim)
 if cfg.num_gpu > 1:
     gen_model = torch.nn.DataParallel(gen_model)
     disc_model = torch.nn.DataParallel(disc_model)

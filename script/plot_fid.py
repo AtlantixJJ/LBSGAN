@@ -7,8 +7,11 @@ matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-bss = [32, 64, 256, 512, 1024, 2048]
-name = ['cifar10_bs%d' % d for d in bss]
+bss = [32, 64, 256, 512, 1024, 2048, 4096, 8192]
+NROW = 4; NCOL = 2
+YMIN = 10; YMAX = 160
+expr_name = sys.argv[2] #cifar10, celeba64
+name = ['%s_bs%d' % (expr_name, d) for d in bss]
 log_dir = sys.argv[1]
 
 def plot_repeat(ax, name):
@@ -25,7 +28,6 @@ def plot_repeat(ax, name):
         except:
             continue
         fid = np.array(result['eval_fid'])[:, 1]
-        if fid.shape[0] < 200: continue
         x = np.array(result['eval_fid'])[:, 0]
         fids.append(np.array(fid))
     fids = np.array(fids)
@@ -43,12 +45,14 @@ def plot_repeat(ax, name):
 
     print("Min fid: %f" % min_fid.min())
 
-fig = plt.figure(figsize=(8, 7))
+fig, axes = plt.subplots(nrows=NROW, ncols=NCOL, figsize=(6, 16))
+fig.tight_layout()
+plt.subplots_adjust(left=0.1, top=0.96, bottom=0.11, hspace=0.3)
 for i, n in enumerate(name):
     print("=> %s" % n)
-    ax = plt.subplot(2, 3, 1 + i)
-    ax.set_ylim(ymin=20, ymax=100)
-    ax.set_title("%d" % bss[i])
+    ax = axes[i // NCOL, i % NCOL]
+    ax.set_ylim(ymin=YMIN, ymax=YMAX)
+    ax.set_title("batchsize=%d" % bss[i])
     plot_repeat(ax, n)
 plt.savefig("all.png")
 plt.close()
